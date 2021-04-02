@@ -1,7 +1,7 @@
 % Planar Linear Inverted Pendulum Mode w/ COM velocity footplacement
 clear; clc; close all;
 restoredefaultpath;
-addpath(genpath('visualization/'));
+addpath(genpath('utils/'));
 
 %% Initialize
 set(0,'DefaultFigureWindowStyle','docked');
