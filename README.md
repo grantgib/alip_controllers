@@ -1,2 +1,2 @@
 # lipm
-Linear Inverted Pendulum mode simulations
+Linear Inverted Pendulum Mode Foot Placement Control
