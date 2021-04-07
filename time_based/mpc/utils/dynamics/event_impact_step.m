@@ -11,11 +11,7 @@ function [value,isterminal,direction] = event_impact_step(t,x,p)
 %       function is decreasing.
 
 %% Output
-if p.gait_type == "phase"
-    value = x(1) - p.x_step;
-    isterminal = 1;
-    direction = 1;
-elseif p.gait_type == "time"
+if p.phase_type == "time"
     value = t - p.t_step;
     isterminal = 1;
     direction = 1;

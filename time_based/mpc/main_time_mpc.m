@@ -2,98 +2,91 @@
 clear; clc; close all;
 restoredefaultpath;
 addpath(genpath('utils/'));
-
-%% Initialize
+addpath(genpath('/home/grantgib/workspace/toolbox/casadi-linux-matlabR2014b-v3.5.5'));
 set(0,'DefaultFigureWindowStyle','docked');
-visualize = struct(...
-    'plot',     1,...
-    'anim',     0);
-params = struct(...
-    'gait_type',            "time",... % phase, time
-    'g',                    9.81,...
+
+%% Initialize Data Structures
+% Higher level structure
+info = struct(...
+    'vis_info',     struct(),...
+    'sym_info',     struct(),...
+    'ctrl_info',    struct(),...
+    'gait_info',    struct(),...
+    'sol_info',     struct());
+
+% Visualization info
+info.vis_info = struct(...
+    'plot', 1,...
+    'anim', 1);
+
+% Symbolic variables
+info.sym_info = struct(...
+    'n_x',      2,...
+    'g',        9.81);
+
+% Gait parameters
+info.gait_info = struct(...
+    'phase_type',           "time",... time
+    'x_init',               [-2;10],...
     'z_const',              1,...
-    'x_step',               1,...       % phase-based gait
-    't_step',               0.3,...     % time-based gait
+    't_step',               0.25,...
     'x_stance',             0,...
-    'com_vel_des',          10,...
-    'num_steps',            100,...
-    'num_steps_change_vel', 10,...
+    'xdot_com_des',         0,...
+    'num_steps',            10,...
+    'num_steps_change_vel', Inf,...
     'increase_vel',         false,...
     'decrease_vel',         true);
-params.fp = struct(...
-    'comvel',   true,...
-    'x_fp',     2,...
-    'Kp_fp',    0.3,...
-    'Kd_fp',    0.45);
-options = odeset('RelTol',1e-8,'AbsTol',1e-8,'Events',@(t,x) event_impact_step(t,x,params));
-tspan = 0:0.01:2;
-x_init = [-1; 10];
-x_init_prev = x_init;
 
-% storage trajectories
-t_traj = [];
-x_traj = [];
-x_st_traj = [];
-vel_des_traj = [];
-impact_traj = [];
-
-
-%% Simulate steps
-for i = 1:params.num_steps
-    [t,x,t_end,x_end] = ode45(@(t,x) ode_lipm_2d(t,x,params), tspan, x_init, options);
-    t = t';
-    x = x';
-    if i == 1
-        x_end_prev = x_end; % initialize x_end_prev on first step
-    end
-    
-    % store data
-    if i > 1
-        t = t + t_traj(end);
-    end
-    impact_traj = [impact_traj, length(t)+length(t_traj)];
-    t_traj = [t_traj, t];
-    x_traj = [x_traj, x + [params.x_stance; 0]];
-    x_st_traj = [x_st_traj, params.x_stance*ones(1,length(t))];
-    vel_des_traj = [vel_des_traj, params.com_vel_des*ones(1,length(t))];
-    
-    % Update footplacement based on desired COM velocity
-    x_fp = compute_footplacement(x_end,x_end_prev,params)
-    params.fp.x_fp = x_fp;
-    
-    % Update state & stance leg
-    params.x_stance = params.x_stance + x(1,end) + params.fp.x_fp;
-    x_end_prev = x_end;
-    x_init = [-params.fp.x_fp;
-              x(2,end)];
-    
-    % Change desired velocity
-    if mod(i,params.num_steps_change_vel) == 0 && params.increase_vel
-        params.com_vel_des = params.com_vel_des + 1;
-        if params.com_vel_des > 11
-            params.decrease_vel = true;
-            params.increase_vel = false;
-        end
-    end
-    if mod(i,params.num_steps_change_vel) == 0 && params.decrease_vel
-        params.com_vel_des = params.com_vel_des - 1;
-        if params.com_vel_des < 8
-            params.decrease_vel = false;
-            params.increase_vel = true;
-        end
-    end      
+% Control parameters
+info.ctrl_info.type = "mpc";
+%   mpc
+dt = 0.005;
+k_step =  info.gait_info.t_step / dt;
+N_steps_ahead = 5;
+N_steps = N_steps_ahead + 1;    % first step is predetermined by init; number of discontinuous trajectories, 
+N_fp = N_steps - 1;  % #fp = #N_steps - 1   
+N_k = N_steps * k_step;
+q = 10;     % cost
+for i = 1:N_steps
+    Q(i) = q^i;     % increase exponentially for each step
 end
-params.vel_des_traj = vel_des_traj;
-params.impact_traj = impact_traj;
-params.x_st_traj = x_st_traj;
+info.ctrl_info.mpc = struct(...
+    'x_min',            [-inf; -inf],...
+    'x_max',            [inf; inf],...
+    'ufp',              false,...
+    'ufp_max',          inf,...
+    'ufp_min',          -inf,...
+    'ufp_delta',        1,...
+    'dt',               dt,...
+    'k_step',           k_step,...
+    'N_steps_ahead',    N_steps_ahead,...
+    'N_steps',          N_steps,...
+    'N_k',              N_k,...
+    'N_fp',             N_fp,...
+    'Q',                Q);
+      
+% Solution stuct
+info.sol_info = struct();
 
+%% Formulate Optimization
+disp("Formulating Optimization...");
+info = formulate_mpc(info);
+disp("Optimization Solver Created!");
+% test_solver(); % test solver
+
+%% Initialize Gait/Simulation Parameters
+disp("Simulating...");
+info = simulate_lipm_mpc(info);
+disp("Simulation Complete");
+
+%% Visualization
 % Plot
-if visualize.plot
-    plot_lipm_2d(t_traj,x_traj,params);
+if info.vis_info.plot
+    plot_lipm(info);
 end
 
 % Animate
-if visualize.anim
-    animate_lipm_2d(t_traj,x_traj,params)
+if info.vis_info.anim
+    animate_lipm(info)
 end
 
