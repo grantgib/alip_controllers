@@ -3,6 +3,7 @@ function [info] = simulate_lipm_mpc(info)
 % sym_info
 n_x = info.sym_info.n_x;
 
+
 % gait_info
 x_init = info.gait_info.x_init;
 phase_type = info.gait_info.phase_type;
@@ -45,6 +46,7 @@ x_abs_traj = [];
 x_st_traj = [];
 xdot_des_traj = [];
 impact_traj = [];
+L_traj = [];
 
 %% Simulate steps
 for i = 1:num_steps
@@ -85,24 +87,24 @@ for i = 1:num_steps
     ufp_traj = [ufp_traj, ufp];
     
     % Update state & stance leg
-    x_stance = x_stance + xsol(1,end) + ufp;
-    x_init = [-ufp; xsol(2,end)];
+    x_stance = x_stance +  ufp;
+    x_init = [xsol(1,end)-ufp; xsol(2,end)];
     
     % Change desired velocity
-%     if mod(i,num_steps_change_vel) == 0 && increase_vel
-%         xdot_com_des = xdot_com_des + 1;
-%         if xdot_com_des > 11
-%             decrease_vel = true;
-%             increase_vel = false;
-%         end
-%     end
-%     if mod(i,num_steps_change_vel) == 0 && decrease_vel
-%         xdot_com_des = xdot_com_des - 1;
-%         if xdot_com_des < 8
-%             decrease_vel = false;
-%             increase_vel = true;
-%         end
-%     end
+    if mod(i,num_steps_change_vel) == 0 && increase_vel
+        xdot_des = xdot_des + 1;
+        if xdot_des > 11
+            decrease_vel = true;
+            increase_vel = false;
+        end
+    end
+    if mod(i,num_steps_change_vel) == 0 && decrease_vel
+        xdot_des = xdot_des - 1;
+        if xdot_des < 8
+            decrease_vel = false;
+            increase_vel = true;
+        end
+    end
 end
 
 %% Update Solution structure

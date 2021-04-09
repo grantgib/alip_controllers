@@ -4,10 +4,9 @@ import casadi.*
 %% Extract Inputs
 % sym_info
 g = info.sym_info.g;
+m = info.sym_info.m;
 n_x = info.sym_info.n_x;
-
-% gait_info
-zc = info.gait_info.z_const;
+k_slope = info.sym_info.k_slope;
 
 % ctrl_info
 dt = info.ctrl_info.mpc.dt;         % time interval
@@ -18,12 +17,20 @@ N_steps = info.ctrl_info.mpc.N_steps;
 N_fp = info.ctrl_info.mpc.N_fp;
 Q = info.ctrl_info.mpc.Q;
 
+% gait_info
+zc = info.gait_info.z_const;
+
 %% Dynamics
 % Declare System Variables
-x_com_rel = SX.sym('x_com_rel');  % relative position of center of mass
-xdot_com = SX.sym('xdot_com');
-x = [x_com_rel; xdot_com];
-xdot = [xdot_com; (g/zc)*(x_com_rel)];     % lip model
+xc = SX.sym('x_c');  % relative position of center of mass w.r.t stance contact point
+L_st = SX.sym('L_st');          % Angular momentum about contact point (stance foot)
+zc_dot = k_slope*xc;
+L_c = 0;
+x = [xc; L_st];
+
+xdot = [...
+    (L_st - L_c)/(m*zc) + (zc_dot/zc)*xc; % zc_dot would need to be estimated
+    m*g*(xc)];     % lip model
 
 % Continuous time dynamics
 fc = Function('fc',{x},{xdot});   % f = dx/dt
@@ -64,6 +71,8 @@ delta_fp_constr = {};
 
 % parameters
 P_xdot_des = MX.sym('P_xdot_des');
+P_m = MX.sym('m');
+P_zc = MX.sym('zc');
 
 % cost
 opt_cost = cell(1,N_fp);
@@ -82,10 +91,11 @@ for k = 1:N_k-1
     elseif (k == k_end)
         % add cost
         if n > 1 
-            opt_cost(n-1) = {(Xk(2) - P_xdot_des)' * Q(n) * (Xk(2) - P_xdot_des)};
+            xdot_pseudo = Xk(2)/(P_m*P_zc);
+            opt_cost(n-1) = {(xdot_pseudo-P_xdot_des)' * Q(n) * (xdot_pseudo-P_xdot_des)};
         end
         Xk_end = fd(Xk);
-        Xk_end = [-Ufp_traj{n}; Xk_end(2)];     % update init position to reflect foot placement
+        Xk_end = [Xk_end(1)-Ufp_traj{n}; Xk_end(2)];     % update init position to reflect foot placement
         Xk = X_traj{k+1};
         n = n + 1;      % increase step counter
     else
@@ -94,7 +104,8 @@ for k = 1:N_k-1
     end
     x_constr = [x_constr, {Xk_end-Xk}];
 end
-opt_cost(n-1) = {(Xk(2) - P_xdot_des)' * Q(n) * (Xk(2) - P_xdot_des)};  % add cost for velocity at end of prediction horizon
+xdot_pseudo = Xk(2)/(P_m*P_zc);
+opt_cost(n-1) = {(xdot_pseudo-P_xdot_des)' * Q(n) * (xdot_pseudo-P_xdot_des)}; % add cost for velocity at end of prediction horizon
 
 % Rate limiter (only consider when there is more than one fp)
 if N_fp > 1
@@ -109,7 +120,7 @@ end
 opt_cost = sum(vertcat(opt_cost{:}));
 opt_var = [vertcat(X_traj{:}); vertcat(Ufp_traj{:})];
 opt_constr = [vertcat(x_constr{:}); vertcat(delta_fp_constr{:})];
-opt_params = P_xdot_des;
+opt_params = [P_xdot_des; P_m; P_zc];
 
 %% Create an OPT solver
 prob = struct(...
@@ -118,9 +129,9 @@ prob = struct(...
     'g',    opt_constr,...
     'p',    opt_params);
 options = struct();
-% options.ipopt.opt.print_level = 0;
-options.ipopt.print_timing_statistics = 'yes';
-options.ipopt.linear_solver = 'ma57';
+options.ipopt.print_level = 0;
+% options.ipopt.print_timing_statistics = 'yes';
+% options.ipopt.linear_solver = 'ma57';
 % options.ipopt.acceptable_tol = 1e-8;
 % options.ipopt.acceptable_obj_change_tol = 1e-8;
 % options.ipopt.acceptable_constr_viol_tol = 1e-8;
@@ -134,10 +145,6 @@ solver = nlpsol('solver','ipopt',prob,options);
 %% Return symbolics and solver
 info.sym_info.fd = fd;
 info.ctrl_info.mpc.solver = solver;
-
-
-
-
 
 
 
