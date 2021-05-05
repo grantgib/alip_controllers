@@ -51,6 +51,7 @@ function [ufp_sol] = compute_footplacement(p)
         x_sol = opti.value(optvar(1:end-N_fp));
         x_sol = reshape(x_sol,2,length(x_sol)/2);
         ufp_sol = opti.value(optvar(end-(N_fp-1):end));
+        
         cost_sol = sol.value(opti.f);
 
 

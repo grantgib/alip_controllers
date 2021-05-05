@@ -16,38 +16,52 @@ N_k = info.ctrl_info.mpc.N_k;
 N_steps = info.ctrl_info.mpc.N_steps;
 N_fp = info.ctrl_info.mpc.N_fp;
 Q = info.ctrl_info.mpc.Q;
+sol_type = info.ctrl_info.mpc.sol_type;
 
 % gait_info
-zc = info.gait_info.z_const;
+z_H = info.gait_info.z_H;
 
 %% Dynamics
 % Declare System Variables
-xc = SX.sym('x_c');  % relative position of center of mass w.r.t stance contact point
-L_st = SX.sym('L_st');          % Angular momentum about contact point (stance foot)
-zc_dot = k_slope*xc;
-L_c = 0;
-x = [xc; L_st];
+xc = SX.sym('xc');  % relative position of center of mass w.r.t stance contact point
+Lst = SX.sym('Lst');          % Angular momentum about contact point (stance foot)
+x = [xc; Lst];
 
 xdot = [...
-    (L_st - L_c)/(m*zc) + (zc_dot/zc)*xc; % zc_dot would need to be estimated
+    (Lst)/(m*z_H); % zc_dot would need to be estimated
     m*g*(xc)];     % lip model
 
 % Continuous time dynamics
 fc = Function('fc',{x},{xdot});   % f = dx/dt
 
 % Discrete time dynamics
-M = 4;
-dt_rk = dt / M;
-X0 = MX.sym('X0',2);
-X = X0;
-for j = 1:M
-    k1 = fc(X);
-    k2 = fc(X + (dt_rk/2)*k1);
-    k3 = fc(X + (dt_rk/2)*k2);
-    k4 = fc(X + dt_rk*k3);
-    X = X + (dt_rk/6) * (k1 + 2*k2 + 2*k3 + k4);
+rk_explicit = false;
+if rk_explicit
+    M = 4;
+    dt_rk = dt / M;
+    X0 = MX.sym('X0',2);
+    X = X0;
+    for j = 1:M
+        k1 = fc(X);
+        k2 = fc(X + (dt_rk/2)*k1);
+        k3 = fc(X + (dt_rk/2)*k2);
+        k4 = fc(X + dt_rk*k3);
+        X = X + (dt_rk/6) * (k1 + 2*k2 + 2*k3 + k4);
+    end
+    fd = Function('fd',{X0},{X});
+else
+    opts_intg = struct(...
+        'tf',                           dt,...
+        'simplify',                     true,...
+        'number_of_finite_elements',    4);
+    dae = struct(...
+        'x',    x,...
+        'ode',  xdot);
+    intg = integrator('intg','rk',dae,opts_intg);
+    res = intg('x0',x);
+    x_next = res.xf;
+    fd = Function('fd',{x},{x_next});
 end
-fd = Function('fd',{X0},{X});
 
 %% Formulate Optimization Problem
 % Initialize variables
@@ -128,19 +142,49 @@ prob = struct(...
     'x',    opt_var,...
     'g',    opt_constr,...
     'p',    opt_params);
-options = struct();
-options.ipopt.print_level = 0;
-% options.ipopt.print_timing_statistics = 'yes';
-% options.ipopt.linear_solver = 'ma57';
-% options.ipopt.acceptable_tol = 1e-8;
-% options.ipopt.acceptable_obj_change_tol = 1e-8;
-% options.ipopt.acceptable_constr_viol_tol = 1e-8;
-% options.ipopt.hessian_constant = 'yes';
-% options.ipopt.jac_d_constant = 'yes';  % Indicates whether all inequality constraints are linear
-% options.ipopt.max_iter = 500;
-% options.ipopt.max_cpu_time = 0.25;
 
-solver = nlpsol('solver','ipopt',prob,options);
+if sol_type == "ipopt"
+    opts = struct();
+    opts.ipopt.print_level = 0;
+    opts.ipopt.print_time = 'false';
+    % options.ipopt.print_timing_statistics = 'yes';
+    opts.ipopt.linear_solver = 'ma57';
+    % options.ipopt.acceptable_tol = 1e-8;
+    % options.ipopt.acceptable_obj_change_tol = 1e-8;
+    % options.ipopt.acceptable_constr_viol_tol = 1e-8;
+    % options.ipopt.hessian_constant = 'yes';
+    % options.ipopt.jac_d_constant = 'yes';  % Indicates whether all inequality constraints are linear
+    % options.ipopt.max_iter = 500;
+    % options.ipopt.max_cpu_time = 0.25;
+    solver = nlpsol('solver','ipopt',prob,opts);
+elseif sol_type == "qrqp"
+    % C++ Code Generation
+    opts = struct(...
+        'qpsol',            'qrqp',...
+        'print_header',     false,...
+        'print_iteration',  false,...
+        'print_time',       false);    % osqp, qrqp (not as robust joris says on google groups)
+    opts.qpsol_options = struct(...
+        'print_iter',       false,...
+        'print_header',     false,...
+        'print_info',       false);
+    solver = nlpsol('solver','sqpmethod',prob,opts);
+    
+    gen_opts = struct(...
+        'mex',          true,...
+        'cpp',          true,...
+        'main',         true,...
+        'with_header',  false);
+    solver.generate('mpctest.c',gen_opts)
+elseif sol_type == "qpoases"
+    solver = qpsol('solver','qpoases',prob);
+%     gen_opts = struct(...
+%         'mex',  true,...
+%         'cpp',  true,...
+%         'main', true);
+%     solver.generate('mpc_qp_test.cpp',gen_opts);
+%     mex mpc_qp_test.cpp -largeArrayDims
+end
 
 %% Return symbolics and solver
 info.sym_info.fd = fd;

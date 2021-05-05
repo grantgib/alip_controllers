@@ -1,16 +1,15 @@
 function [Xdot] = ode_lipm(t,X,info)
 %% Extract Inputs
-x = X(1);
-xdot = X(2);
 g = info.sym_info.g;
-zc = info.gait_info.z_const;
+m = info.sym_info.m;
+z_H = info.gait_info.z_H;
 
-%% Compute acceleration
-xddot = (g/zc)*x;
+xc = X(1);
+L_st = X(2);
 
-%% Output state vector time derivative
-Xdot = [xdot;
-        xddot];
+%% state derivative
+Xdot = [L_st/(m*z_H); % zc_dot would need to be estimated
+        m*g*(xc)];
 
 end
 

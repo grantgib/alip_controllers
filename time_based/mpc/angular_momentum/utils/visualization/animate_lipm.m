@@ -7,10 +7,12 @@ x_st = info.sol_info.x_st_traj;
 len = length(t);
 iter_impact = info.sol_info.impact_traj;
 
+z_H = info.gait_info.z_H;
+
 %% Initialize Figure
 figure;
 p_st = [x_st(1); 0];
-p_com = [x(1,1); info.gait_info.z_const];
+p_com = [x(1,1); z_H];
 wd = 15;
 sz = 5000;
 alpha = 0.1;
@@ -26,7 +28,7 @@ com = scatter(p_com(1),p_com(2),...
     sz,red,'filled');
 hold on;
 grid on;
-axis([-5 5 0 1.5])
+axis([-5 5 0 z_H+0.5])
 xlabel('x [m]');
 ylabel('z [m]');
 k = 1;
@@ -44,10 +46,10 @@ hold on;
 %% Animate Figure
 for i = 1:len
     p_st = [x_st(i); 0];
-    p_com = [x(1,i); info.gait_info.z_const];
+    p_com = [x(1,i); z_H];
     set(leg,'XData',[p_st(1) p_com(1)],'YData',[p_st(2) p_com(2)])
     set(com,'XData',p_com(1),'YData',p_com(2));
-    axis([-5+p_com(1) 5+p_com(1) 0 1.5])
+    axis([-5+p_com(1) 5+p_com(1) 0 z_H+0.5])
     
     if i == iter_impact(k)+1
         hold on;

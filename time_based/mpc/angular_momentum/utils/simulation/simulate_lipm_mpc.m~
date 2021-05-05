@@ -7,7 +7,7 @@ m = info.sym_info.m;
 
 % gait_info
 z_H = info.gait_info.z_H;
-x_init = info.gait_info.xc_init;
+xc_init = info.gait_info.xc_init;
 phase_type = info.gait_info.phase_type;
 t_step = info.gait_info.t_step;
 num_steps = info.gait_info.num_steps;
@@ -32,9 +32,7 @@ N_fp = info.ctrl_info.mpc.N_fp;
 
 opti = info.ctrl_info.mpc.opti;
 p_xcinit = info.ctrl_info.mpc.p_xcinit;
-p_xcdot_des = info.ctrl_info.mpc.p_xcdot_des;
-p_z_H = info.ctrl_info.mpc.p_z_H;
-p_ufp_delta = info.ctrl_info.mpc.p_ufp_delta;
+
 
 
 %% Initialize
@@ -63,7 +61,7 @@ for i = 1:num_steps
         'type',         ufp_type,...
         'm',            m,...
         'z_H',          z_H,...
-        'xc_init',      x_init,...
+        'xc_init',      xc_init,...
         'x_min',        x_min,...
         'x_max',        x_max,...
         'xcdot_des',    xcdot_des,...
@@ -75,10 +73,7 @@ for i = 1:num_steps
         'N_k',          N_k,...
         'N_fp',         N_fp,...
         'opti',         opti,...
-        'p_xcinit',     p_xcinit,...
-        'p_xcdot_des',  p_xcdot_des,...
-        'p_z_H',        p_z_H,...
-        'p_ufp_delta',  p_ufp_delta);
+        'p_xcinit',     p_xcinit);
     [ufp_sol] = compute_footplacement(ufp_params); % Select foot placement for next step
     ufp = ufp_sol(1);
     
@@ -96,7 +91,7 @@ for i = 1:num_steps
     x_traj = [x_traj, xsol];
     x_abs_traj = [x_abs_traj, xsol + [x_stance; 0]];
     x_st_traj = [x_st_traj, x_stance*ones(1,length(tsol))];
-    xdot_des_traj = [xdot_des_traj, xcdot_des*ones(1,length(tsol))];
+    xdot_des_traj = [xdot_des_traj, xdot_des*ones(1,length(tsol))];
     ufp_traj = [ufp_traj, ufp];
     
     % Update state & stance leg
@@ -105,15 +100,15 @@ for i = 1:num_steps
     
     % Change desired velocity
     if mod(i,num_steps_change_vel) == 0 && increase_vel
-        xcdot_des = xcdot_des + 1;
-        if xcdot_des >= 1
+        xdot_des = xdot_des + 1;
+        if xdot_des >= 1
             decrease_vel = true;
             increase_vel = false;
         end
     end
     if mod(i,num_steps_change_vel) == 0 && decrease_vel
-        xcdot_des = xcdot_des - 1;
-        if xcdot_des <= -1
+        xdot_des = xdot_des - 1;
+        if xdot_des <= -1
             decrease_vel = false;
             increase_vel = true;
         end
