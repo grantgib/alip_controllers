@@ -3,9 +3,11 @@ function [] = plot_lipm(info)
 m = info.sym_info.m;
 z_H = info.gait_info.z_H;
 t = info.sol_info.t_traj;
-x = info.sol_info.x_traj;
-xabs = info.sol_info.x_abs_traj;
-ufp = info.sol_info.fp_traj;
+x = cell2mat(info.sol_info.x_traj);
+xabs = cell2mat(info.sol_info.x_abs_traj);
+xcdot_des = cell2mat(info.sol_info.xcdot_des_traj);
+ufp = cell2mat(info.sol_info.ufp_traj);
+ufp_sol = info.sol_info.ufp_sol_traj;
 [n_x,n_length] = size(x);
 
 %% State plots
@@ -20,7 +22,7 @@ for i = 1:n_x
         grid on;
     elseif i == 2
         hold on;
-        plot(t,info.sol_info.xdot_com_des_traj,':r','LineWidth',4);
+        plot(t,xcdot_des,':r','LineWidth',4);
         plot(t,x(i,:)/(m*z_H),'color',[0 0.4470 0.7410]);
         xlabel('time [sec]','interpreter','latex','FontSize',sz);
         ylabel(headers(i),'interpreter','latex','FontSize',sz);

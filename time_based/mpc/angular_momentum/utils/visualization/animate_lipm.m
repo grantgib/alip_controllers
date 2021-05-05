@@ -1,11 +1,11 @@
 function [] = animate_lipm(info)
 %% Extract Inputs
 t = info.sol_info.t_traj;
-x = info.sol_info.x_abs_traj;
+x = cell2mat(info.sol_info.x_abs_traj);
 
-x_st = info.sol_info.x_st_traj;
+x_st = cell2mat(info.sol_info.x_st_traj);
 len = length(t);
-iter_impact = info.sol_info.impact_traj;
+iter_impact = cell2mat(info.sol_info.iter_impact_traj);
 
 z_H = info.gait_info.z_H;
 
