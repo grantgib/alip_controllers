@@ -2,6 +2,7 @@ function [info] = simulate_lipm_mpc(info)
 %% Extract Input
 % sym_info
 n_x = info.sym_info.n_x;
+n_ufp = info.sym_info.n_ufp;
 m = info.sym_info.m;
  
 % gait_info
@@ -11,10 +12,11 @@ phase_type = info.gait_info.phase_type;
 t_step = info.gait_info.t_step;
 num_steps = info.gait_info.num_steps;
 num_steps_change_vel = info.gait_info.num_steps_change_vel;
-xst = info.gait_info.x_stance;
+xyst = info.gait_info.xyst;
 increase_vel = info.gait_info.increase_vel;
 decrease_vel = info.gait_info.decrease_vel;
 xcdot_des = info.gait_info.xcdot_des;
+ycdot_des = info.gait_info.ycdot_des;
 
 % ctrl_info
 ufp_type = info.ctrl_info.type;
@@ -31,6 +33,7 @@ opti = info.ctrl_info.mpc.opti;
 f_opti = info.ctrl_info.mpc.f_opti;
 p_x_init = info.ctrl_info.mpc.p_x_init;
 p_xcdot_des = info.ctrl_info.mpc.p_xcdot_des;
+p_ycdot_des = info.ctrl_info.mpc.p_ycdot_des;
 p_z_H = info.ctrl_info.mpc.p_z_H;
 p_ufp_delta = info.ctrl_info.mpc.p_ufp_delta;
 
@@ -45,10 +48,11 @@ tspan = 0:0.005:2;
 % storage variables
 t_traj = 0;
 x_traj = {x_init};
-x_abs_traj = {x_init(1)+xst};
-x_st_traj = {xst};
+xy_abs_traj = {x_init(1:2)+xyst};
+xyst_traj = {xyst};
 xcdot_des_traj = {xcdot_des};
-iter_impact_traj = {};
+ycdot_des_traj = {ycdot_des};
+iter_impact_traj = {1};
 x_sol_traj = {};
 ufp_sol_traj = {};
 cost_sol_traj = {};
@@ -67,24 +71,27 @@ for i = 1:num_steps
         'x_min',        x_min,...
         'x_max',        x_max,...
         'xcdot_des',    xcdot_des,...
+        'ycdot_des',    ycdot_des,...
         'ufp_max',      ufp_max,...
         'ufp_min',      ufp_min,...
         'ufp_delta',    ufp_delta,...
         'N_steps',      N_steps,...
         'n_x',          n_x,...
+        'n_ufp',        n_ufp,...
         'opti',         opti,...
         'p_x_init',     p_x_init,...
         'p_xcdot_des',  p_xcdot_des,...
+        'p_ycdot_des',  p_ycdot_des,...
         'p_z_H',        p_z_H,...
         'p_ufp_delta',  p_ufp_delta);
     [ufp_sol,x_sol,cost_sol] = compute_footplacement(ufp_params); % Select foot placement for next step
-    ufp = ufp_sol(1);
+    ufp = ufp_sol(:,1);
         
     % Update
-    xst = xst + ufp;
+    xyst = xyst + ufp;
     x_init = [...
-        x_init(1)-ufp;
-        x_init(2)];
+        x_init(1:2)-ufp;
+        x_init(3:4)];
     
     % Update 
     % Forward simulate step
@@ -99,9 +106,10 @@ for i = 1:num_steps
     iter_impact_traj = [iter_impact_traj, {length(tsol)+length(t_traj)}];
     t_traj = [t_traj, tsol];
     x_traj = [x_traj, {xsol}];
-    x_abs_traj = [x_abs_traj, {xsol(1,:)+xst}];
-    x_st_traj = [x_st_traj, {xst*ones(1,length(tsol))}];
-    xcdot_des_traj = [xcdot_des_traj, {xcdot_des*ones(1,length(tsol))}];
+    xy_abs_traj = [xy_abs_traj, {xsol(1:2,:)+xyst}];
+    xyst_traj = [xyst_traj, {xyst.*ones(2,length(tsol))}];
+    xcdot_des_traj = [xcdot_des_traj, {xcdot_des.*ones(1,length(tsol))}];
+    ycdot_des_traj = [ycdot_des_traj, {ycdot_des.*ones(1,length(tsol))}];
     ufp_sol_traj = [ufp_sol_traj, {ufp_sol}];
     x_sol_traj = [x_sol_traj, {x_sol}];
     cost_sol_traj = [cost_sol_traj, {cost_sol}];
@@ -113,14 +121,16 @@ for i = 1:num_steps
     % Change desired velocity
     if mod(i,num_steps_change_vel) == 0 && increase_vel
         xcdot_des = xcdot_des + 2;
-        if xcdot_des >= 1
+        ycdot_des = ycdot_des + 1;
+        if ycdot_des >= 1
             decrease_vel = true;
             increase_vel = false;
         end
     end
     if mod(i,num_steps_change_vel) == 0 && decrease_vel
         xcdot_des = xcdot_des - 1;
-        if xcdot_des <= -2
+        ycdot_des = ycdot_des - 0.5;
+        if ycdot_des <= -2
             decrease_vel = false;
             increase_vel = true;
         end
@@ -134,11 +144,11 @@ sol_info.ufp_sol_traj = ufp_sol_traj;
 sol_info.x_sol_traj = x_sol_traj;
 sol_info.ufp_traj = ufp_traj;
 sol_info.x_traj = x_traj;
-sol_info.x_abs_traj = x_abs_traj;
-sol_info.x_st_traj = x_st_traj;
+sol_info.x_abs_traj = xy_abs_traj;
+sol_info.xst_traj = xyst_traj;
 sol_info.xcdot_des_traj = xcdot_des_traj;
+sol_info.ycdot_des_traj = ycdot_des_traj;
 sol_info.iter_impact_traj = iter_impact_traj;
-sol_info.x_st_traj = x_st_traj;
 
 %% Update info struct
 info.sol_info = sol_info;
