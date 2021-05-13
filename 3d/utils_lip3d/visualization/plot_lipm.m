@@ -54,14 +54,14 @@ xlabel('xc_{abs}');
 ylabel('yc_{abs}');
 grid on;
 
-figure
-hold on;
-plot(xcdot_des,ycdot_des,':r','LineWidth',4);
-plot(x(4,:)/(m*z_H),-x(3,:)/(m*z_H),'color',[0 0.4470 0.7410]);
-grid on;
-xlabel('xcdot');
-ylabel('ycdot');
-legend('desired velocity','actual velocity')
+% figure
+% hold on;
+% plot(xcdot_des,ycdot_des,':r','LineWidth',4);
+% plot(x(4,:)/(m*z_H),-x(3,:)/(m*z_H),'color',[0 0.4470 0.7410]);
+% grid on;
+% xlabel('xcdot');
+% ylabel('ycdot');
+% legend('desired velocity','actual velocity')
 
 figure
 plot(t,xabs(1,:));
