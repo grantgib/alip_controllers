@@ -6,6 +6,7 @@ import casadi.*
 g = info.sym_info.g;
 m = info.sym_info.m;
 n_x = info.sym_info.n_x;
+n_ufp = info.sym_info.n_ufp;
 kx = info.sym_info.kx;
 ky = info.sym_info.ky;
 
@@ -19,20 +20,22 @@ N_steps = info.ctrl_info.mpc.N_steps;
 Q = info.ctrl_info.mpc.Q;
 sol_type = info.ctrl_info.mpc.sol_type;
 
+
 %% Dynamics
-% Declare System Variables
+% Declare System Variables: constraint zc = kx*xc + ky*yc + z_H
 xc = SX.sym('xc');  % relative position of center of mass w.r.t stance contact point
 yc = SX.sym('yc');
 Lx = SX.sym('Lx');
 Ly = SX.sym('Ly');          % Angular momentum about contact point (stance foot)
-x = [xc; yc; Lx; Ly];
+Lz = SX.sym('Lz');
+x = [xc; yc; Lx; Ly; Lz];
 
-xdot = [...
-    Ly/(m*z_H); % zc_dot would need to be estimated
-    -Lx/(m*z_H);
-    -m*g*yc
-    m*g*xc];     % lip model
-
+xcdot = (Ly + ky*Lz)/(m*z_H);
+ycdot = (-Lx - kx*Lz)/(m*z_H);
+Lxdot = -m*g*yc;
+Lydot = m*g*xc;     % lip model
+Lzdot = 0;
+xdot = [xcdot; ycdot; Lxdot; Lydot; Lzdot];
 % Continuous time dynamics
 fc = Function('fc',{x},{xdot});   % f = dx/dt
 
@@ -59,61 +62,78 @@ N_k = N_steps * k_step;
 opti = casadi.Opti();
 
 % opt vars
-X_traj = opti.variable(4,N_k);
-Ufp_traj = opti.variable(2,N_fp);
+X_traj = opti.variable(n_x,N_k);
+Ufp_traj = opti.variable(n_ufp,N_fp);
 
 % parameters
-p_x_init = opti.parameter(4,1);
+p_x_init = opti.parameter(n_x,1);
 p_xcdot_des = opti.parameter(1,1);
 p_ycdot_des = opti.parameter(1,1);
 p_z_H = opti.parameter(1,1);        % nominal z height of com
-p_ufp_delta = opti.parameter(2,1);
+p_ufp_delta = opti.parameter(n_ufp,1);
 
 % cost
-opt_cost = cell(1,N_fp);
+opt_cost = {};
 
 % initial conditions
-Xk = X_traj(:,1);
+X_k = X_traj(:,1);
 n = 0;      % foot step iteration
+xst_abs = 0;
+yst_abs = 0;
 
 % Loop through discrete trajectory
 for k = 1:N_k-1
     k_pre = n*(k_step+1)+1;       % iterate pre-impact
     k_post = k_pre + 1;             % iterate post-impact
+    xc_k = X_k(1);
+    yc_k = X_k(2);
+    Lx_k = X_k(3);
+    Ly_k = X_k(4);
+    Lz_k = X_k(5);
+    xcdot_k = (Ly_k+ky*Lz_k)/(m*p_z_H);
+    ycdot_k = (-Lx_k-kx*Lz_k)/(m*p_z_H);
+%     if n > 0
+%         vel_error = [...
+%             xcdot_k-p_xcdot_des;
+%             ycdot_k-p_ycdot_des];
+%         opt_cost = [opt_cost, {vel_error'*Q(n)*vel_error}];
+%     end
     if (k == k_pre)
-        % add cost
-        if n > 0 
-            Lxk = Xk(3);
-            Lyk = Xk(4);
-            xcdot_pseudo = Lyk/(m*p_z_H);
-            ycdot_psuedo = -Lxk/(m*p_z_H);
+        if n > 0
             vel_error = [...
-                xcdot_pseudo-p_xcdot_des;
-                ycdot_psuedo-p_ycdot_des];
-            opt_cost(n) = {vel_error'*Q(n)*vel_error};
+                xcdot_k-p_xcdot_des;
+                ycdot_k-p_ycdot_des];
+            opt_cost = [opt_cost, {vel_error'*Q(n)*vel_error}];
         end
         Xk_end = [...
-            Xk(1)-Ufp_traj(1,n+1);
-            Xk(2)-Ufp_traj(2,n+1);
-            Xk(3);
-            Xk(4)];     % update init position to reflect foot placement
-        Xk = X_traj(:,k+1);
+            xc_k-Ufp_traj(1,n+1);
+            yc_k-Ufp_traj(2,n+1);
+            Lx_k;
+            Ly_k;
+            Lz_k];     % update init position to reflect foot placement
+        xst_abs = xst_abs + Ufp_traj(1,n+1);
+        yst_abs = yst_abs + Ufp_traj(2,n+1);
+        opti.subject_to(Ufp_traj(3,n+1) == kx*xst_abs + ky*yst_abs)
+        X_k = X_traj(:,k+1);
         n = n + 1;      % increase step counter
     else %(k >= k_post)
         % init state of n-th step
-        Xk_end = fd(Xk);
-        Xk = X_traj(:,k+1);
+        Xk_end = fd(X_k);
+        X_k = X_traj(:,k+1);
     end
-    opti.subject_to(Xk_end == Xk);
+    opti.subject_to(Xk_end == X_k);
 end
-Lxk = Xk(3);
-Lyk = Xk(4);
-xcdot_pseudo = Lyk/(m*p_z_H);
-ycdot_psuedo = -Lxk/(m*p_z_H);
+xc_k = X_k(1);
+yc_k = X_k(2);
+Lx_k = X_k(3);
+Ly_k = X_k(4);
+Lz_k = X_k(5);
+xcdot_k = (Ly_k+ky*Lz_k)/(m*p_z_H);
+ycdot_k = (-Lx_k-kx*Lz_k)/(m*p_z_H);
 vel_error = [...
-    xcdot_pseudo-p_xcdot_des;
-    ycdot_psuedo-p_ycdot_des];
-opt_cost(n) = {vel_error'*Q(n)*vel_error};
+    xcdot_k-p_xcdot_des;
+    ycdot_k-p_ycdot_des];
+opt_cost = [opt_cost, {vel_error'*Q(n)*vel_error}];
 
 % initial condition constraint
 opti.subject_to(X_traj(:,1) == p_x_init);
@@ -147,23 +167,23 @@ if sol_type == "qrqp"
     f_opti = opti.to_function('F_sqp',{p_x_init,p_xcdot_des,p_ycdot_des,p_z_H,p_ufp_delta},{Ufp_traj});
     
     % test
-%     opti.set_value(p_x_init,[0.1;0.1;0;0])
-%     opti.set_value(p_xcdot_des,1);
-%     opti.set_value(p_ycdot_des,1);
-%     opti.set_value(p_z_H,0.8);
-%     opti.set_value(p_ufp_delta,10);
-%     sol = opti.solve();
-%     xsol = sol.value(X_traj)
-%     ufpsol = sol.value(Ufp_traj)
+    opti.set_value(p_x_init,[0.1;0;0;0;0])
+    opti.set_value(p_xcdot_des,1);
+    opti.set_value(p_ycdot_des,0);
+    opti.set_value(p_z_H,0.8);
+    opti.set_value(p_ufp_delta,10);
+    sol = opti.solve();
+    xsol = sol.value(X_traj)
+    ufpsol = sol.value(Ufp_traj)
     
     % code generation
-%     F_sqp.save('F_sqp.casadi');
-%     F_sqp.generate('sqptest',struct('mex',true))
-%     disp('Compiling...')
-%     mex sqptest.c -DMATLAB_MEX_FILE
-%     disp('done')
-%     format long
-end 
+    %     F_sqp.save('F_sqp.casadi');
+    %     F_sqp.generate('sqptest',struct('mex',true))
+    %     disp('Compiling...')
+    %     mex sqptest.c -DMATLAB_MEX_FILE
+    %     disp('done')
+    %     format long
+end
 
 %% Return symbolics and solver
 info.sym_info.fd = fd;

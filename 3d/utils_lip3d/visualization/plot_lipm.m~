@@ -95,9 +95,7 @@ hold on;
 plot(xyabs(1,:),zabs);
 line([0 xyabs(1,end)],[z_H kx*xyabs(1,end)+z_H],'LineStyle',':','LineWidth',2,'color','r');
 grid on;
-xlabel('$xc_{abs}$','interpreter','latex','FontSize',sz);
-ylabel('$zc_{abs}$','interpreter','latex','FontSize',sz);
-
+xlabel(
 
 %% Foot Placement
 
