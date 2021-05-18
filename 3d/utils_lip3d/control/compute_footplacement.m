@@ -17,6 +17,9 @@ function [ufp_sol,x_sol,cost_sol] = compute_footplacement(p)
     ufp_max = p.ufp_max; % p.ufp_max;
     ufp_delta = p.ufp_delta; % p.ufp_delta;
     
+    % terrain
+    k = p.k;
+    
     % mpc
     n_x = p.n_x;
     n_ufp = p.n_ufp;
@@ -27,6 +30,7 @@ function [ufp_sol,x_sol,cost_sol] = compute_footplacement(p)
     p_ycdot_des = p.p_ycdot_des;
     p_z_H = p.p_z_H;
     p_ufp_delta = p.p_ufp_delta;
+    p_k = p.p_k;
     
     %% Foot Placement
     if p.type == "mpc"
@@ -41,7 +45,7 @@ function [ufp_sol,x_sol,cost_sol] = compute_footplacement(p)
         opti.set_value(p_ycdot_des,ycdot_des);
         opti.set_value(p_z_H,z_H);
         opti.set_value(p_ufp_delta,ufp_delta);
-        
+        opti.set_value(p_k,k);
         % Solve
         sol = opti.solve();
         

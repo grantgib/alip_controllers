@@ -1,7 +1,7 @@
 function [] = plot_lipm(info)
 %% Extract Input
 m = info.sym_info.m;
-kx = info.sym_info.kx;
+k_traj = cell2mat(info.sol_info.k_traj);
 z_H = info.gait_info.z_H;
 t = info.sol_info.t_traj;
 x = cell2mat(info.sol_info.x_traj);
@@ -91,12 +91,14 @@ xlabel('time [sec]','interpreter','latex','FontSize',sz);
 ylabel('$zc_{abs}$','interpreter','latex','FontSize',sz);
 
 figure;
-hold on;
-plot(xyabs(1,:),zabs);
-line([0 xyabs(1,end)],[z_H kx*xyabs(1,end)+z_H],'LineStyle',':','LineWidth',2,'color','r');
+hold on; view(45,10)
+plot3(xyabs(1,:),xyabs(2,:),zabs);
+zabs_des = k_traj(1,:).*xyabs(1,:) + k_traj(2,:).*xyabs(2,:) + z_H;
+plot3(xyabs(1,:),xyabs(2,:),zabs_des,'LineStyle',':','LineWidth',2,'color','r');
 grid on;
 xlabel('$xc_{abs}$','interpreter','latex','FontSize',sz);
-ylabel('$zc_{abs}$','interpreter','latex','FontSize',sz);
+ylabel('$yc_{abs}$','interpreter','latex','FontSize',sz);
+zlabel('$zc_{abs}$','interpreter','latex','FontSize',sz);
 
 
 %% Foot Placement

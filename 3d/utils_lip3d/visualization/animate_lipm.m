@@ -28,6 +28,7 @@ green = [0.4660 0.6740 0.1880];
 red = [0.6350 0.0780 0.1840];
 yellow = [0.9290 0.6940 0.1250];
 black = [0.1 0.1 0.1];
+st_color = green;
 leg = line([p_st(1) p_com(1)],[p_st(2) p_com(2)],[p_st(3) p_com(3)],...
     'LineWidth',wd,...
     'Color',blue);
@@ -68,7 +69,13 @@ for i = 1:len
             'Color',[blue,alpha]);
         scatter3(p_com(1),p_com(2),p_com(3),sz_com,red,'filled',...
             'MarkerFaceAlpha',alpha)
-        scatter3(p_st(1),p_st(2),p_st(3),sz_st,green,'filled');
+        
+        scatter3(p_st(1),p_st(2),p_st(3),sz_st,st_color,'filled');
+        if isequal(st_color,green)
+            st_color = yellow;
+        else
+            st_color = green;
+        end
         k = k + 1;
     end
     

@@ -7,8 +7,6 @@ g = info.sym_info.g;
 m = info.sym_info.m;
 n_x = info.sym_info.n_x;
 n_ufp = info.sym_info.n_ufp;
-kx = info.sym_info.kx;
-ky = info.sym_info.ky;
 
 % gait_info
 z_H = info.gait_info.z_H;
@@ -29,15 +27,19 @@ Lx = SX.sym('Lx');
 Ly = SX.sym('Ly');          % Angular momentum about contact point (stance foot)
 Lz = SX.sym('Lz');
 x = [xc; yc; Lx; Ly; Lz];
+kx_sym = SX.sym('kx_sym');
+ky_sym = SX.sym('ky_sym');
+k_sym = [kx_sym;ky_sym];
 
-xcdot = (Ly + ky*Lz)/(m*z_H);
-ycdot = (-Lx - kx*Lz)/(m*z_H);
+xcdot = (Ly + ky_sym*Lz)/(m*z_H);
+ycdot = (-Lx - kx_sym*Lz)/(m*z_H);
 Lxdot = -m*g*yc;
 Lydot = m*g*xc;     % lip model
 Lzdot = 0;
 xdot = [xcdot; ycdot; Lxdot; Lydot; Lzdot];
+
 % Continuous time dynamics
-fc = Function('fc',{x},{xdot});   % f = dx/dt
+fc = Function('fc',{x,k_sym},{xdot});   % f = dx/dt
 
 % Discrete time dynamics
 opts_intg = struct(...
@@ -46,11 +48,12 @@ opts_intg = struct(...
     'number_of_finite_elements',    4);
 dae = struct(...
     'x',    x,...
+    'p',    k_sym,...
     'ode',  xdot);
 intg = integrator('intg','rk',dae,opts_intg);
-result = intg('x0',x);
+result = intg('x0',x,'p',k_sym);
 x_next = result.xf;
-fd = Function('fd',{x},{x_next});
+fd = Function('fd',{x,k_sym},{x_next});
 
 %% Formulate Optimization Problem
 % Intermediate optimization variables
@@ -71,6 +74,9 @@ p_xcdot_des = opti.parameter(1,1);
 p_ycdot_des = opti.parameter(1,1);
 p_z_H = opti.parameter(1,1);        % nominal z height of com
 p_ufp_delta = opti.parameter(n_ufp,1);
+p_k = opti.parameter(2,1); % [kx; ky]
+p_kx = p_k(1);
+p_ky = p_k(2);
 
 % cost
 opt_cost = {};
@@ -90,8 +96,8 @@ for k = 1:N_k-1
     Lx_k = X_k(3);
     Ly_k = X_k(4);
     Lz_k = X_k(5);
-    xcdot_k = (Ly_k+ky*Lz_k)/(m*p_z_H);
-    ycdot_k = (-Lx_k-kx*Lz_k)/(m*p_z_H);
+    xcdot_k = (Ly_k+p_ky*Lz_k)/(m*p_z_H);
+    ycdot_k = (-Lx_k-p_kx(1)*Lz_k)/(m*p_z_H);
 %     if n > 0
 %         vel_error = [...
 %             xcdot_k-p_xcdot_des;
@@ -113,12 +119,12 @@ for k = 1:N_k-1
             Lz_k];     % update init position to reflect foot placement
         xst_abs = xst_abs + Ufp_traj(1,n+1);
         yst_abs = yst_abs + Ufp_traj(2,n+1);
-        opti.subject_to(Ufp_traj(3,n+1) == kx*xst_abs + ky*yst_abs)
+        opti.subject_to(Ufp_traj(3,n+1) == p_kx*xst_abs + p_ky*yst_abs)
         X_k = X_traj(:,k+1);
         n = n + 1;      % increase step counter
     else %(k >= k_post)
         % init state of n-th step
-        Xk_end = fd(X_k);
+        Xk_end = fd(X_k,p_k);
         X_k = X_traj(:,k+1);
     end
     opti.subject_to(Xk_end == X_k);
@@ -128,8 +134,8 @@ yc_k = X_k(2);
 Lx_k = X_k(3);
 Ly_k = X_k(4);
 Lz_k = X_k(5);
-xcdot_k = (Ly_k+ky*Lz_k)/(m*p_z_H);
-ycdot_k = (-Lx_k-kx*Lz_k)/(m*p_z_H);
+xcdot_k = (Ly_k+p_ky*Lz_k)/(m*p_z_H);
+ycdot_k = (-Lx_k-p_kx*Lz_k)/(m*p_z_H);
 vel_error = [...
     xcdot_k-p_xcdot_des;
     ycdot_k-p_ycdot_des];
@@ -167,14 +173,15 @@ if sol_type == "qrqp"
     f_opti = opti.to_function('F_sqp',{p_x_init,p_xcdot_des,p_ycdot_des,p_z_H,p_ufp_delta},{Ufp_traj});
     
     % test
-    opti.set_value(p_x_init,[0.1;0;0;0;0])
-    opti.set_value(p_xcdot_des,1);
-    opti.set_value(p_ycdot_des,0);
-    opti.set_value(p_z_H,0.8);
-    opti.set_value(p_ufp_delta,10);
-    sol = opti.solve();
-    xsol = sol.value(X_traj)
-    ufpsol = sol.value(Ufp_traj)
+%     opti.set_value(p_x_init,[0.1;0;0;0;0])
+%     opti.set_value(p_xcdot_des,1);
+%     opti.set_value(p_ycdot_des,1);
+%     opti.set_value(p_z_H,0.8);
+%     opti.set_value(p_ufp_delta,10);
+%     opti.set_value(p_k,[tan(deg2rad(5)); tan(deg2rad(5))]);
+%     sol = opti.solve();
+%     xsol = sol.value(X_traj)
+%     ufpsol = sol.value(Ufp_traj)
     
     % code generation
     %     F_sqp.save('F_sqp.casadi');
@@ -194,4 +201,5 @@ info.ctrl_info.mpc.p_xcdot_des = p_xcdot_des;
 info.ctrl_info.mpc.p_ycdot_des = p_ycdot_des;
 info.ctrl_info.mpc.p_z_H = p_z_H;
 info.ctrl_info.mpc.p_ufp_delta = p_ufp_delta;
+info.ctrl_info.mpc.p_k = p_k;
 
