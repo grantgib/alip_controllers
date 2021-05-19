@@ -5,9 +5,7 @@ n_x = info.sym_info.n_x;
 n_ufp = info.sym_info.n_ufp;
 m = info.sym_info.m;
 g = info.sym_info.g;
-angle_x = info.sym_info.angle_x;
-angle_y = info.sym_info.angle_y;
-[kx,ky] = ang_to_slope(angle_x,angle_y);
+
 
 % gait_info
 z_H = info.gait_info.z_H;
@@ -19,31 +17,27 @@ num_steps = info.gait_info.num_steps;
 num_steps_change_vel = info.gait_info.num_steps_change_vel;
 num_steps_change_slope = info.gait_info.num_steps_change_slope;
 xyzst = info.gait_info.xyzst;
-increase_vel = info.gait_info.vel_increase;
-decrease_vel = info.gait_info.vel_decrease;
+vel_increase = info.gait_info.vel_increase;
+vel_decrease = info.gait_info.vel_decrease;
 slope_increase = info.gait_info.slope_increase;
 slope_decrease = info.gait_info.slope_decrease;
-xcdot_des = info.gait_info.xcdot_des;
-ycdot_des = info.gait_info.ycdot_des;
+vel_des = info.gait_info.vel_des;
+angle_x = info.gait_info.angle_x;
+angle_y = info.gait_info.angle_y;
+[kx,ky] = ang_to_slope(angle_x,angle_y);
+[xcdot_des,ycdot_des] = extract_vel_des(vel_des,kx,ky);
 
 % ctrl_info
 ufp_type = info.ctrl_info.type;
-
-x_min = info.ctrl_info.mpc.x_min;
-x_max = info.ctrl_info.mpc.x_max;
-
 ufp_max = info.ctrl_info.mpc.ufp_max;
-ufp_min = info.ctrl_info.mpc.ufp_min;
-ufp_delta = info.ctrl_info.mpc.ufp_delta;
 N_steps = info.ctrl_info.mpc.N_steps;
-
 opti = info.ctrl_info.mpc.opti;
 f_opti = info.ctrl_info.mpc.f_opti;
 p_x_init = info.ctrl_info.mpc.p_x_init;
 p_xcdot_des = info.ctrl_info.mpc.p_xcdot_des;
 p_ycdot_des = info.ctrl_info.mpc.p_ycdot_des;
 p_z_H = info.ctrl_info.mpc.p_z_H;
-p_ufp_delta = info.ctrl_info.mpc.p_ufp_delta;
+p_ufp_max = info.ctrl_info.mpc.p_ufp_max;
 p_k = info.ctrl_info.mpc.p_k;
 
 %% Initialize
@@ -60,6 +54,7 @@ xy_abs_traj = {x_init(1:2)+xyzst(1:2)};
 zc_init = kx*x_init(1) + ky*x_init(2) + z_H;
 z_abs_traj = {zc_init};
 xyzst_traj = {xyzst};
+vel_des_traj = {vel_des};
 xcdot_des_traj = {xcdot_des};
 ycdot_des_traj = {ycdot_des};
 iter_impact_traj = {1};
@@ -81,13 +76,9 @@ for iter = 1:num_steps
         'm',            m,...
         'z_H',          z_H,...
         'x_init',       x_init,...
-        'x_min',        x_min,...
-        'x_max',        x_max,...
         'xcdot_des',    xcdot_des,...
         'ycdot_des',    ycdot_des,...
         'ufp_max',      ufp_max,...
-        'ufp_min',      ufp_min,...
-        'ufp_delta',    ufp_delta,...
         'k',            [kx;ky],...
         'N_steps',      N_steps,...
         'n_x',          n_x,...
@@ -97,7 +88,7 @@ for iter = 1:num_steps
         'p_xcdot_des',  p_xcdot_des,...
         'p_ycdot_des',  p_ycdot_des,...
         'p_z_H',        p_z_H,...
-        'p_ufp_delta',  p_ufp_delta,...
+        'p_ufp_max',    p_ufp_max,...
         'p_k',          p_k);
     [ufp_sol,x_sol,cost_sol] = compute_footplacement(ufp_params); % Select foot placement for next step
     ufp = ufp_sol(:,1);
@@ -135,6 +126,7 @@ for iter = 1:num_steps
     xy_abs_traj = [xy_abs_traj, {xsol(1:2,:)+xyzst(1:2)}];
     z_abs_traj = [z_abs_traj, {zcsol}];
     xyzst_traj = [xyzst_traj, {xyzst.*ones(3,length(tsol))}];
+    vel_des_traj = [vel_des_traj, {vel_des.*ones(1,length(tsol))}];
     xcdot_des_traj = [xcdot_des_traj, {xcdot_des.*ones(1,length(tsol))}];
     ycdot_des_traj = [ycdot_des_traj, {ycdot_des.*ones(1,length(tsol))}];
     k_traj = [k_traj, {[kx;ky].*ones(1,length(tsol))}];
@@ -147,37 +139,38 @@ for iter = 1:num_steps
     x_init = xsol(:,end);
     
     % Change desired velocity
-    if mod(iter,num_steps_change_vel) == 0 && increase_vel
-        xcdot_des = xcdot_des + 0.5;
-        ycdot_des = ycdot_des + 0.2;
+    if mod(iter,num_steps_change_vel) == 0 && vel_increase
+        vel_des = vel_des + 0.5;
+        [xcdot_des,ycdot_des] = extract_vel_des(vel_des,kx,ky);
         if ycdot_des >= 1
-            decrease_vel = true;
-            increase_vel = false;
+            vel_decrease = true;
+            vel_increase = false;
         end
         iter_vel_change_traj = [iter_vel_change_traj, {length(tsol)+length(t_traj)}];
-        
     end
-    if mod(iter,num_steps_change_vel) == 0 && decrease_vel
-        xcdot_des = xcdot_des - 0.5;
-        ycdot_des = ycdot_des - 0.2;
+    if mod(iter,num_steps_change_vel) == 0 && vel_decrease
+        vel_des = vel_des + 0.5;
+        [xcdot_des,ycdot_des] = extract_vel_des(vel_des,kx,ky);
         if ycdot_des <= -2
-            decrease_vel = false;
-            increase_vel = true;
+            vel_decrease = false;
+            vel_increase = true;
         end
         iter_vel_change_traj = [iter_vel_change_traj, {length(tsol)+length(t_traj)}];
     end
     
     % Change desired slope
-    if mod(iter,num_steps_change_slope) == 0 && increase_slope
-        angle_x = angle_x + 5;
-        angle_y = angle_y + 5;
+    if mod(iter,num_steps_change_slope) == 0 && slope_increase
+        angle_x = angle_x + 2;
+%         angle_y = angle_y + 2;
         [kx,ky] = ang_to_slope(angle_x,angle_y);
+        [xcdot_des,ycdot_des] = extract_vel_des(vel_des,kx,ky);
         iter_slope_change_traj = [iter_slope_change_traj, {length(tsol)+length(t_traj)}];
     end
-    if mod(iter,num_steps_change_slope) == 0 && decrease_slope
-        angle_x = angle_x - 5;
-        angle_y = angle_y - 5;
+    if mod(iter,num_steps_change_slope) == 0 && slope_decrease
+        angle_x = angle_x - 1;
+%         angle_y = angle_y - 1;
         [kx,ky] = ang_to_slope(angle_x,angle_y);
+        [xcdot_des,ycdot_des] = extract_vel_des(vel_des,kx,ky);
         iter_slope_change_traj = [iter_slope_change_traj, {length(tsol)+length(t_traj)}];
     end
 end
@@ -213,7 +206,6 @@ end
 
 %% Update Solution structure
 sol_info.t_traj = t_traj;
-sol_info.x_mpc_traj = x_sol_traj;
 sol_info.ufp_sol_traj = ufp_sol_traj;
 sol_info.x_sol_traj = x_sol_traj;
 sol_info.ufp_traj = ufp_traj;

@@ -60,7 +60,8 @@ hold on;
 plot(xyabs(1,:),xyabs(2,:),'LineWidth',4);
 xlabel('xc_{abs}');
 ylabel('yc_{abs}');
-grid on;
+title('X-Y Plane View');
+grid on; axis equal;
 
 % figure
 % hold on;
@@ -99,7 +100,7 @@ grid on;
 xlabel('$xc_{abs}$','interpreter','latex','FontSize',sz);
 ylabel('$yc_{abs}$','interpreter','latex','FontSize',sz);
 zlabel('$zc_{abs}$','interpreter','latex','FontSize',sz);
-
+axis equal;
 
 %% Foot Placement
 

@@ -73,7 +73,7 @@ p_x_init = opti.parameter(n_x,1);
 p_xcdot_des = opti.parameter(1,1);
 p_ycdot_des = opti.parameter(1,1);
 p_z_H = opti.parameter(1,1);        % nominal z height of com
-p_ufp_delta = opti.parameter(n_ufp,1);
+p_ufp_max = opti.parameter(n_ufp,1);
 p_k = opti.parameter(2,1); % [kx; ky]
 p_kx = p_k(1);
 p_ky = p_k(2);
@@ -144,13 +144,17 @@ opt_cost = [opt_cost, {vel_error'*Q(n)*vel_error}];
 % initial condition constraint
 opti.subject_to(X_traj(:,1) == p_x_init);
 
-% Rate limiter (only consider when there is more than one fp)
-if N_fp > 1
-    for n = 1:N_fp-1
-        Ufp = Ufp_traj(:,n);
-        Ufp_next = Ufp_traj(:,n+1);
-        opti.subject_to(-p_ufp_delta <= Ufp_next - Ufp <= p_ufp_delta)
-    end
+% Foot Placement limits (only consider when there is more than one fp)
+for n = 1:N_fp
+    Ufp = Ufp_traj(1:2,n);
+    opti.subject_to(-p_ufp_max(1:2) <= Ufp <= p_ufp_max(1:2))
+end
+
+z_prev = 0;
+for n = 1:N_fp
+    Ufp_z = Ufp_traj(3,n);
+    opti.subject_to(-p_ufp_max(3) <= Ufp_z - z_prev <= p_ufp_max(3));
+    z_prev = Ufp_z;
 end
 
 % Combine cost, vars, constraints, parameters
@@ -170,7 +174,7 @@ if sol_type == "qrqp"
         'print_header',     false,...
         'print_info',       false);
     opti.solver('sqpmethod',opts);
-    f_opti = opti.to_function('F_sqp',{p_x_init,p_xcdot_des,p_ycdot_des,p_z_H,p_ufp_delta},{Ufp_traj});
+    f_opti = opti.to_function('F_sqp',{p_x_init,p_xcdot_des,p_ycdot_des,p_z_H,p_ufp_max},{Ufp_traj});
     
     % test
 %     opti.set_value(p_x_init,[0.1;0;0;0;0])
@@ -200,6 +204,6 @@ info.ctrl_info.mpc.p_x_init = p_x_init;
 info.ctrl_info.mpc.p_xcdot_des = p_xcdot_des;
 info.ctrl_info.mpc.p_ycdot_des = p_ycdot_des;
 info.ctrl_info.mpc.p_z_H = p_z_H;
-info.ctrl_info.mpc.p_ufp_delta = p_ufp_delta;
+info.ctrl_info.mpc.p_ufp_max = p_ufp_max;
 info.ctrl_info.mpc.p_k = p_k;
 

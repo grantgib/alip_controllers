@@ -7,15 +7,11 @@ function [ufp_sol,x_sol,cost_sol] = compute_footplacement(p)
     
     % state
     x_init = p.x_init;
-    x_min = [-inf; -inf; -inf; -inf]; %p.x_min;
-    x_max = [inf; inf; inf; inf]; % p.x_max;
     xcdot_des = p.xcdot_des;
     ycdot_des = p.ycdot_des;
     
     % control
-    ufp_min = p.ufp_min; % p.ufp_min;
     ufp_max = p.ufp_max; % p.ufp_max;
-    ufp_delta = p.ufp_delta; % p.ufp_delta;
     
     % terrain
     k = p.k;
@@ -29,7 +25,7 @@ function [ufp_sol,x_sol,cost_sol] = compute_footplacement(p)
     p_xcdot_des = p.p_xcdot_des;
     p_ycdot_des = p.p_ycdot_des;
     p_z_H = p.p_z_H;
-    p_ufp_delta = p.p_ufp_delta;
+    p_ufp_max = p.p_ufp_max;
     p_k = p.p_k;
     
     %% Foot Placement
@@ -44,7 +40,7 @@ function [ufp_sol,x_sol,cost_sol] = compute_footplacement(p)
         opti.set_value(p_xcdot_des,xcdot_des);
         opti.set_value(p_ycdot_des,ycdot_des);
         opti.set_value(p_z_H,z_H);
-        opti.set_value(p_ufp_delta,ufp_delta);
+        opti.set_value(p_ufp_max,ufp_max);
         opti.set_value(p_k,k);
         % Solve
         sol = opti.solve();

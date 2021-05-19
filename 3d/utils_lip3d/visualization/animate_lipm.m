@@ -2,8 +2,9 @@ function [] = animate_lipm(info)
 %% Extract Inputs
 t = info.sol_info.t_traj;
 x = [cell2mat(info.sol_info.xy_abs_traj); cell2mat(info.sol_info.z_abs_traj)];
-kx = info.sym_info.kx;
-ky = info.sym_info.ky;
+k_traj = cell2mat(info.sol_info.k_traj);
+kx = k_traj(1,:);
+ky = k_traj(2,:);
 xyzst = cell2mat(info.sol_info.xyzst_traj);
 ufptraj = cell2mat(info.sol_info.ufp_sol_traj);
 len = length(t);
@@ -50,8 +51,8 @@ line([p_st(1) p_com(1)],[p_st(2) p_com(2)],[p_st(3) p_com(3)],...
 scatter3(p_com(1),p_com(2),p_com(3),sz_com,gray,'filled',...
     'MarkerFaceAlpha',alpha_init)
 
-bnd = 1000;
-line([-bnd bnd],[-bnd bnd],[kx*-bnd+ky*-bnd kx*bnd+ky*bnd],'LineWidth',4,'color','k');
+% bnd = 1000;
+% line([-bnd bnd],[-bnd bnd],[kx*-bnd+ky*-bnd kx*bnd+ky*bnd],'LineWidth',4,'color','k');
 % s = surf(xlin,ylin,zlin,'EdgeColor','none','FaceAlpha',0.5);
 
 %% Animate Figure
