@@ -79,13 +79,16 @@ p_kx = p_k(1);
 p_ky = p_k(2);
 
 % cost
-opt_cost = {};
+opt_cost_vel = {};
+opt_cost_avgvel = {};
 
 % initial conditions
 X_k = X_traj(:,1);
 n = 0;      % foot step iteration
 xst_abs = 0;
 yst_abs = 0;
+x_eos = {X_k};
+x_bos = {};
 
 % Loop through discrete trajectory
 for k = 1:N_k-1
@@ -98,19 +101,26 @@ for k = 1:N_k-1
     Lz_k = X_k(5);
     xcdot_k = (Ly_k+p_ky*Lz_k)/(m*p_z_H);
     ycdot_k = (-Lx_k-p_kx(1)*Lz_k)/(m*p_z_H);
-%     if n > 0
-%         vel_error = [...
-%             xcdot_k-p_xcdot_des;
-%             ycdot_k-p_ycdot_des];
-%         opt_cost = [opt_cost, {vel_error'*Q(n)*vel_error}];
-%     end
     if (k == k_pre)
-        if n > 0
+        if n > 0 % initial condition fixed
+            x_eos = [x_eos, {X_k}];
+%             avgxvel_k = (x_eos{end}(1)-x_bos{end}(1))/t_step;
+%             avgyvel_k = (x_eos{end}(2)-x_bos{end}(2))/t_step;
+            
+            
+            avgxvel_k = Ufp_traj(1,n+1)/t_step;
+            avgyvel_k = Ufp_traj(2,n+1)/t_step;
+            
+            avgvel_error = [...
+                avgxvel_k-p_xcdot_des;
+                avgyvel_k-p_ycdot_des];
+            opt_cost_avgvel = [opt_cost_avgvel, {avgvel_error'*Q(n)*avgvel_error}];
+            
             vel_error = [...
                 xcdot_k-p_xcdot_des;
                 ycdot_k-p_ycdot_des];
-            opt_cost = [opt_cost, {vel_error'*Q(n)*vel_error}];
-        end
+            opt_cost_vel = [opt_cost_vel, {vel_error'*Q(n)*vel_error}];
+        end      
         Xk_end = [...
             xc_k-Ufp_traj(1,n+1);
             yc_k-Ufp_traj(2,n+1);
@@ -120,10 +130,14 @@ for k = 1:N_k-1
         xst_abs = xst_abs + Ufp_traj(1,n+1);
         yst_abs = yst_abs + Ufp_traj(2,n+1);
         opti.subject_to(Ufp_traj(3,n+1) == p_kx*xst_abs + p_ky*yst_abs)
+        X_k = X_traj(:,k+1);      
+    elseif (k == k_post)
+        % init state of n-th step
+        x_bos = [x_bos, {X_k}];
+        Xk_end = fd(X_k,p_k);
         X_k = X_traj(:,k+1);
         n = n + 1;      % increase step counter
-    else %(k >= k_post)
-        % init state of n-th step
+    else
         Xk_end = fd(X_k,p_k);
         X_k = X_traj(:,k+1);
     end
@@ -136,30 +150,34 @@ Ly_k = X_k(4);
 Lz_k = X_k(5);
 xcdot_k = (Ly_k+p_ky*Lz_k)/(m*p_z_H);
 ycdot_k = (-Lx_k-p_kx*Lz_k)/(m*p_z_H);
-vel_error = [...
+avgvel_error = [...
     xcdot_k-p_xcdot_des;
     ycdot_k-p_ycdot_des];
-opt_cost = [opt_cost, {vel_error'*Q(n)*vel_error}];
+opt_cost_avgvel = [opt_cost_avgvel, {avgvel_error'*Q(n)*avgvel_error}];
 
 % initial condition constraint
 opti.subject_to(X_traj(:,1) == p_x_init);
 
 % Foot Placement limits (only consider when there is more than one fp)
-for n = 1:N_fp
-    Ufp = Ufp_traj(1:2,n);
-    opti.subject_to(-p_ufp_max(1:2) <= Ufp <= p_ufp_max(1:2))
-end
-
 z_prev = 0;
 for n = 1:N_fp
+    Ufp_xy = Ufp_traj(1:2,n);
     Ufp_z = Ufp_traj(3,n);
+    opti.subject_to(-p_ufp_max(1:2) <= Ufp_xy <= p_ufp_max(1:2))
     opti.subject_to(-p_ufp_max(3) <= Ufp_z - z_prev <= p_ufp_max(3));
     z_prev = Ufp_z;
+    
 end
 
 % Combine cost, vars, constraints, parameters
-opt_cost_total = sum(vertcat(opt_cost{:}));
-opti.minimize(opt_cost_total);
+final_angmom_error = x_eos{end}(3:end) - x_eos{end-1}(3:end);
+opt_cost_stab = final_angmom_error' * 100*Q(n) * final_angmom_error;
+% opt_cost_vel_total = sum(vertcat(opt_cost_vel{:}));
+opt_cost_avgvel_total = sum(vertcat(opt_cost_avgvel{:}));
+
+% opti.minimize(opt_cost_avgvel_total);
+% opti.minimize(opt_cost_vel_total + opt_cost_stab);
+opti.minimize(opt_cost_avgvel_total + opt_cost_stab);
 
 %% Create an OPT solver
 if sol_type == "qrqp"

@@ -11,6 +11,9 @@ xcdot_des = cell2mat(info.sol_info.xcdot_des_traj);
 ycdot_des = cell2mat(info.sol_info.ycdot_des_traj);
 ufp = cell2mat(info.sol_info.ufp_traj);
 ufp_sol = info.sol_info.ufp_sol_traj;
+t_impact = cell2mat(info.sol_info.t_impact_traj);
+avgvel = cell2mat(info.sol_info.avgvel_traj);
+
 [n_x,n_length] = size(x);
 
 %% State plots
@@ -32,18 +35,20 @@ for i = 1:n_x
         hold on;
         plot(t,ycdot_des,':r','LineWidth',4);
         plot(t,-x(i,:)/(m*z_H),'color',[0 0.4470 0.7410]);
+        plot(t_impact,avgvel(2,:),'k', 'LineWidth',2);
         xlabel('time [sec]','interpreter','latex','FontSize',sz);
         ylabel(headers(i),'interpreter','latex','FontSize',sz);
         grid on;
-        legend('desired y velocity','actual y velocity');
+        legend('desired y velocity','actual y velocity','average y vel');
     elseif i == 4
         hold on;
         plot(t,xcdot_des,':r','LineWidth',4);
         plot(t,x(i,:)/(m*z_H),'color',[0 0.4470 0.7410]);
+        plot(t_impact,avgvel(1,:),'k', 'LineWidth',2);
         xlabel('time [sec]','interpreter','latex','FontSize',sz);
         ylabel(headers(i),'interpreter','latex','FontSize',sz);
         grid on;
-        legend('desired x velocity','actual x velocity');
+        legend('desired x velocity','actual x velocity', 'average x vel');
     elseif i == 5
         hold on;
         plot(t,x(i,:));

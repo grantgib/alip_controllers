@@ -65,6 +65,8 @@ ufp_sol_traj = {};
 cost_sol_traj = {};
 ufp_traj = {};
 k_traj = {[kx; ky]};
+t_impact_traj = {};
+avgvel_traj = {};
 
 %% Simulate steps
 for iter = 1:num_steps
@@ -114,8 +116,7 @@ for iter = 1:num_steps
     for j = 1:length(tsol)
         zcsol(:,j) = kx*(xsol(1,j)+xyzst(1)) + ky*(xsol(2,j)+xyzst(2)) + z_H;
     end
-    
-    
+      
     % Store data
     if iter > 1
         tsol = tsol + t_traj(end);
@@ -134,6 +135,10 @@ for iter = 1:num_steps
     x_sol_traj = [x_sol_traj, {x_sol}];
     cost_sol_traj = [cost_sol_traj, {cost_sol}];
     ufp_traj = [ufp_traj,{ufp}];
+    t_impact_traj = [t_impact_traj, {tsol(end)}];
+    avgvel_traj = [avgvel_traj, {[(xsol(1,end)-xsol(1,1))/t_step; (xsol(2,end)-xsol(2,1))/t_step]}];
+%     avgvel_traj = [avgvel_traj, {[(xyzst_traj{end}(1,1)-xyzst_traj{end-1}(1,1))/t_step; (xyzst_traj{end}(2,1)-xyzst_traj{end-1}(2,1))/t_step]}];
+%     avgvel_traj = [avgvel_traj, {[(ufp_traj{end}(1))/t_step; (ufp_traj{end}(2))/t_step]}];
     
     % Update
     x_init = xsol(:,end);
@@ -219,6 +224,8 @@ sol_info.iter_impact_traj = iter_impact_traj;
 sol_info.iter_vel_change_traj = iter_vel_change_traj;
 sol_info.iter_slope_change_traj = iter_slope_change_traj;
 sol_info.k_traj = k_traj;
+sol_info.t_impact_traj = t_impact_traj;
+sol_info.avgvel_traj = avgvel_traj;
 
 %% Update info struct
 info.sol_info = sol_info;
