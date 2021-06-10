@@ -13,6 +13,8 @@ ufp = cell2mat(info.sol_info.ufp_traj);
 ufp_sol = info.sol_info.ufp_sol_traj;
 t_impact = cell2mat(info.sol_info.t_impact_traj);
 avgvel = cell2mat(info.sol_info.avgvel_traj);
+xc_slip_traj = cell2mat(info.sol_info.xc_slip_traj);
+yc_slip_traj = cell2mat(info.sol_info.yc_slip_traj);
 
 [n_x,n_length] = size(x);
 
@@ -22,12 +24,18 @@ sz = 30;
 for i = 1:n_x
     figure(i);
     if i == 1
+        hold on;
         plot(t,x(i,:),'color',[0 0.4470 0.7410]);
+        plot(t,xc_slip_traj,':r');
+        plot(t,-xc_slip_traj,':r');
         xlabel('time [sec]','interpreter','latex','FontSize',sz);
         ylabel(headers(i),'interpreter','latex','FontSize',sz);
         grid on;
     elseif i == 2
+        hold on;
         plot(t,x(i,:),'color',[0 0.4470 0.7410]);
+        plot(t,yc_slip_traj,':r');
+        plot(t,-yc_slip_traj,':r');
         xlabel('time [sec]','interpreter','latex','FontSize',sz);
         ylabel(headers(i),'interpreter','latex','FontSize',sz);
         grid on;

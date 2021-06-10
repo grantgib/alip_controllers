@@ -9,7 +9,6 @@ n_x = info.sym_info.n_x;
 n_ufp = info.sym_info.n_ufp;
 
 % gait_info
-z_H = info.gait_info.z_H;
 t_step = info.gait_info.t_step;     % step period
 
 % ctrl_info
@@ -27,19 +26,22 @@ Lx = SX.sym('Lx');
 Ly = SX.sym('Ly');          % Angular momentum about contact point (stance foot)
 Lz = SX.sym('Lz');
 x = [xc; yc; Lx; Ly; Lz];
+
+% params
+z_H_sym = SX.sym('z_H_sym');
 kx_sym = SX.sym('kx_sym');
 ky_sym = SX.sym('ky_sym');
 k_sym = [kx_sym;ky_sym];
 
-xcdot = (Ly + ky_sym*Lz)/(m*z_H);
-ycdot = (-Lx - kx_sym*Lz)/(m*z_H);
+xcdot = (Ly + ky_sym*Lz)/(m*z_H_sym);
+ycdot = (-Lx - kx_sym*Lz)/(m*z_H_sym);
 Lxdot = -m*g*yc;
 Lydot = m*g*xc;     % lip model
 Lzdot = 0;
 xdot = [xcdot; ycdot; Lxdot; Lydot; Lzdot];
 
 % Continuous time dynamics
-fc = Function('fc',{x,k_sym},{xdot});   % f = dx/dt
+fc = Function('fc',{x,k_sym,z_H_sym},{xdot});   % f = dx/dt
 
 % Discrete time dynamics
 opts_intg = struct(...
@@ -48,12 +50,12 @@ opts_intg = struct(...
     'number_of_finite_elements',    4);
 dae = struct(...
     'x',    x,...
-    'p',    k_sym,...
+    'p',    [k_sym;z_H_sym],...
     'ode',  xdot);
 intg = integrator('intg','rk',dae,opts_intg);
-result = intg('x0',x,'p',k_sym);
+result = intg('x0',x,'p',[k_sym;z_H_sym]);
 x_next = result.xf;
-fd = Function('fd',{x,k_sym},{x_next});
+fd = Function('fd',{x,k_sym,z_H_sym},{x_next});
 
 %% Formulate Optimization Problem
 % Intermediate optimization variables
@@ -74,9 +76,12 @@ p_xcdot_des = opti.parameter(1,1);
 p_ycdot_des = opti.parameter(1,1);
 p_z_H = opti.parameter(1,1);        % nominal z height of com
 p_ufp_max = opti.parameter(n_ufp,1);
+p_ufp_min = opti.parameter(n_ufp,1);
 p_k = opti.parameter(2,1); % [kx; ky]
+p_mu = opti.parameter(1,1); % friction coefficient
 p_kx = p_k(1);
 p_ky = p_k(2);
+
 
 % cost
 opt_cost_vel = {};
@@ -89,6 +94,8 @@ xst_abs = 0;
 yst_abs = 0;
 x_eos = {X_k};
 x_bos = {};
+xc_slip_limit = (p_mu + p_kx)*p_z_H / (1 - p_mu*p_kx);
+yc_slip_limit = (p_mu + p_ky)*p_z_H / (1 - p_mu*p_ky);
 
 % Loop through discrete trajectory
 for k = 1:N_k-1
@@ -134,14 +141,18 @@ for k = 1:N_k-1
     elseif (k == k_post)
         % init state of n-th step
         x_bos = [x_bos, {X_k}];
-        Xk_end = fd(X_k,p_k);
+        Xk_end = fd(X_k,p_k,p_z_H);
         X_k = X_traj(:,k+1);
         n = n + 1;      % increase step counter
     else
-        Xk_end = fd(X_k,p_k);
+        Xk_end = fd(X_k,p_k,p_z_H);
         X_k = X_traj(:,k+1);
     end
     opti.subject_to(Xk_end == X_k);
+    
+    % GRF constraint
+    opti.subject_to(xc_k <= xc_slip_limit);
+    opti.subject_to(yc_k <= yc_slip_limit);
 end
 xc_k = X_k(1);
 yc_k = X_k(2);
@@ -154,6 +165,9 @@ avgvel_error = [...
     xcdot_k-p_xcdot_des;
     ycdot_k-p_ycdot_des];
 opt_cost_avgvel = [opt_cost_avgvel, {avgvel_error'*Q(n)*avgvel_error}];
+% GRF constraint
+opti.subject_to(-xc_slip_limit <= xc_k <= xc_slip_limit);
+opti.subject_to(-yc_slip_limit <= yc_k <= yc_slip_limit);
 
 % initial condition constraint
 opti.subject_to(X_traj(:,1) == p_x_init);
@@ -166,7 +180,6 @@ for n = 1:N_fp
     opti.subject_to(-p_ufp_max(1:2) <= Ufp_xy <= p_ufp_max(1:2))
     opti.subject_to(-p_ufp_max(3) <= Ufp_z - z_prev <= p_ufp_max(3));
     z_prev = Ufp_z;
-    
 end
 
 % Combine cost, vars, constraints, parameters
@@ -175,9 +188,9 @@ opt_cost_stab = final_angmom_error' * 100*Q(n) * final_angmom_error;
 % opt_cost_vel_total = sum(vertcat(opt_cost_vel{:}));
 opt_cost_avgvel_total = sum(vertcat(opt_cost_avgvel{:}));
 
-% opti.minimize(opt_cost_avgvel_total);
+opti.minimize(opt_cost_avgvel_total);
 % opti.minimize(opt_cost_vel_total + opt_cost_stab);
-opti.minimize(opt_cost_avgvel_total + opt_cost_stab);
+% opti.minimize(opt_cost_avgvel_total + opt_cost_stab);
 
 %% Create an OPT solver
 if sol_type == "qrqp"
@@ -223,5 +236,7 @@ info.ctrl_info.mpc.p_xcdot_des = p_xcdot_des;
 info.ctrl_info.mpc.p_ycdot_des = p_ycdot_des;
 info.ctrl_info.mpc.p_z_H = p_z_H;
 info.ctrl_info.mpc.p_ufp_max = p_ufp_max;
+info.ctrl_info.mpc.p_ufp_min = p_ufp_min;
 info.ctrl_info.mpc.p_k = p_k;
+info.ctrl_info.mpc.p_mu = p_mu;
 

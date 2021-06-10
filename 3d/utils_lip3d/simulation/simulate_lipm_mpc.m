@@ -6,7 +6,6 @@ n_ufp = info.sym_info.n_ufp;
 m = info.sym_info.m;
 g = info.sym_info.g;
 
-
 % gait_info
 z_H = info.gait_info.z_H;
 
@@ -24,12 +23,14 @@ slope_decrease = info.gait_info.slope_decrease;
 vel_des = info.gait_info.vel_des;
 angle_x = info.gait_info.angle_x;
 angle_y = info.gait_info.angle_y;
+mu = info.gait_info.mu;
 [kx,ky] = ang_to_slope(angle_x,angle_y);
 [xcdot_des,ycdot_des] = extract_vel_des(vel_des,kx,ky);
 
 % ctrl_info
 ufp_type = info.ctrl_info.type;
 ufp_max = info.ctrl_info.mpc.ufp_max;
+ufp_min = info.ctrl_info.mpc.ufp_min;
 N_steps = info.ctrl_info.mpc.N_steps;
 opti = info.ctrl_info.mpc.opti;
 f_opti = info.ctrl_info.mpc.f_opti;
@@ -38,7 +39,9 @@ p_xcdot_des = info.ctrl_info.mpc.p_xcdot_des;
 p_ycdot_des = info.ctrl_info.mpc.p_ycdot_des;
 p_z_H = info.ctrl_info.mpc.p_z_H;
 p_ufp_max = info.ctrl_info.mpc.p_ufp_max;
+p_ufp_min = info.ctrl_info.mpc.p_ufp_min;
 p_k = info.ctrl_info.mpc.p_k;
+p_mu = info.ctrl_info.mpc.p_mu;
 
 %% Initialize
 ode_params = struct(...
@@ -65,6 +68,8 @@ ufp_sol_traj = {};
 cost_sol_traj = {};
 ufp_traj = {};
 k_traj = {[kx; ky]};
+xc_slip_traj = {};
+yc_slip_traj = {};
 t_impact_traj = {};
 avgvel_traj = {};
 
@@ -81,7 +86,9 @@ for iter = 1:num_steps
         'xcdot_des',    xcdot_des,...
         'ycdot_des',    ycdot_des,...
         'ufp_max',      ufp_max,...
+        'ufp_min',      ufp_min,...
         'k',            [kx;ky],...
+        'mu',           mu,...
         'N_steps',      N_steps,...
         'n_x',          n_x,...
         'n_ufp',        n_ufp,...
@@ -91,7 +98,9 @@ for iter = 1:num_steps
         'p_ycdot_des',  p_ycdot_des,...
         'p_z_H',        p_z_H,...
         'p_ufp_max',    p_ufp_max,...
-        'p_k',          p_k);
+        'p_ufp_min',    p_ufp_min,...
+        'p_k',          p_k,...
+        'p_mu',         p_mu);
     [ufp_sol,x_sol,cost_sol] = compute_footplacement(ufp_params); % Select foot placement for next step
     ufp = ufp_sol(:,1);
         
@@ -179,6 +188,17 @@ for iter = 1:num_steps
         iter_slope_change_traj = [iter_slope_change_traj, {length(tsol)+length(t_traj)}];
     end
 end
+%% End of Sim Calculations
+% GRF slip value
+% disp('hello');
+k_mat = cell2mat(k_traj);
+
+for i = 1:length(t_traj)
+    xc_slip_traj{i} = (mu + k_mat(1,i))*z_H / (1 - mu*k_mat(1,i));
+    yc_slip_traj{i} = (mu + k_mat(2,i))*z_H / (1 - mu*k_mat(2,i));
+end
+
+
 
 %% Post Create Swing Trajectories
 % pst_traj = {};
@@ -226,6 +246,8 @@ sol_info.iter_slope_change_traj = iter_slope_change_traj;
 sol_info.k_traj = k_traj;
 sol_info.t_impact_traj = t_impact_traj;
 sol_info.avgvel_traj = avgvel_traj;
+sol_info.xc_slip_traj = xc_slip_traj;
+sol_info.yc_slip_traj = yc_slip_traj;
 
 %% Update info struct
 info.sol_info = sol_info;
