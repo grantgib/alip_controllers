@@ -11,10 +11,7 @@ k_slope = info.sym_info.k_slope;
 % ctrl_info
 dt = info.ctrl_info.mpc.dt;         % time interval
 t_step = info.gait_info.t_step;     % step period
-k_step = info.ctrl_info.mpc.k_step;
-N_k = info.ctrl_info.mpc.N_k;
 N_steps = info.ctrl_info.mpc.N_steps;
-N_fp = info.ctrl_info.mpc.N_fp;
 Q = info.ctrl_info.mpc.Q;
 sol_type = info.ctrl_info.mpc.sol_type;
 
@@ -64,6 +61,11 @@ else
 end
 
 %% Formulate Optimization Problem
+% Intermediate optimization variables
+N_fp = N_steps;
+k_step = t_step / dt;
+N_k = N_steps * k_step;
+
 % Initialize variables
 n = 1;      % foot step iteration
 
@@ -146,7 +148,7 @@ prob = struct(...
 if sol_type == "ipopt"
     opts = struct();
     opts.ipopt.print_level = 0;
-    opts.ipopt.print_time = 'false';
+%     opts.ipopt.print_time = 'false';
     % options.ipopt.print_timing_statistics = 'yes';
     opts.ipopt.linear_solver = 'ma57';
     % options.ipopt.acceptable_tol = 1e-8;

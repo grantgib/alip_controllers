@@ -146,13 +146,18 @@ if sol_type == "qrqp"
 %     mex sqptest.c -DMATLAB_MEX_FILE
 %     disp('done')
 %     format long
-end 
+elseif sol_type == "ipopt"
+    p_opts = struct('expand',true);
+    s_opts = struct(...
+        'linear_solver',    'ma57'); % solver options
+    opti.solver('ipopt',p_opts,s_opts);
+end
    
 
 %% Return symbolics and solver
 info.sym_info.fd = fd;
 info.ctrl_info.mpc.opti = opti;
-info.ctrl_info.mpc.f_opti = f_opti;
+info.ctrl_info.mpc.f_opti = 0;
 info.ctrl_info.mpc.p_x_init = p_x_init;
 info.ctrl_info.mpc.p_xcdot_des = p_xcdot_des;
 info.ctrl_info.mpc.p_z_H = p_z_H;

@@ -9,21 +9,20 @@ n_x = info.sym_info.n_x;
 n_ufp = info.sym_info.n_ufp;
 
 % gait_info
-t_step = info.gait_info.t_step;     % step period
+t_step_period = info.gait_info.t_step_period;     % step period
 
 % ctrl_info
 dt = info.ctrl_info.mpc.dt;         % time interval
-N_steps = info.ctrl_info.mpc.N_steps;
+N_steps_ahead = info.ctrl_info.mpc.N_steps_ahead;
 Q = info.ctrl_info.mpc.Q;
 sol_type = info.ctrl_info.mpc.sol_type;
-
 
 %% Dynamics
 % Declare System Variables: constraint zc = kx*xc + ky*yc + z_H
 xc = SX.sym('xc');  % relative position of center of mass w.r.t stance contact point
 yc = SX.sym('yc');
 Lx = SX.sym('Lx');
-Ly = SX.sym('Ly');          % Angular momentum about contact point (stance foot)
+Ly = SX.sym('Ly');  % Angular momentum about contact point (stance foot)
 Lz = SX.sym('Lz');
 x = [xc; yc; Lx; Ly; Lz];
 
@@ -59,9 +58,9 @@ fd = Function('fd',{x,k_sym,z_H_sym},{x_next});
 
 %% Formulate Optimization Problem
 % Intermediate optimization variables
-N_fp = N_steps;
-k_step = t_step / dt;
-N_k = N_steps * k_step;
+N_fp = N_steps_ahead;
+k_step = t_step_period / dt;
+N_k = N_steps_ahead * k_step;
 
 % Opti Stack
 opti = casadi.Opti();
@@ -81,7 +80,6 @@ p_k = opti.parameter(2,1); % [kx; ky]
 p_mu = opti.parameter(1,1); % friction coefficient
 p_kx = p_k(1);
 p_ky = p_k(2);
-
 
 % cost
 opt_cost_vel = {};
@@ -111,18 +109,16 @@ for k = 1:N_k-1
     if (k == k_pre)
         if n > 0 % initial condition fixed
             x_eos = [x_eos, {X_k}];
-%             avgxvel_k = (x_eos{end}(1)-x_bos{end}(1))/t_step;
-%             avgyvel_k = (x_eos{end}(2)-x_bos{end}(2))/t_step;
             
-            
-            avgxvel_k = Ufp_traj(1,n+1)/t_step;
-            avgyvel_k = Ufp_traj(2,n+1)/t_step;
-            
+            % average vel cost
+            avgxvel_k = Ufp_traj(1,n+1)/t_step_period;
+            avgyvel_k = Ufp_traj(2,n+1)/t_step_period;
             avgvel_error = [...
                 avgxvel_k-p_xcdot_des;
                 avgyvel_k-p_ycdot_des];
             opt_cost_avgvel = [opt_cost_avgvel, {avgvel_error'*Q(n)*avgvel_error}];
             
+            % vel cost
             vel_error = [...
                 xcdot_k-p_xcdot_des;
                 ycdot_k-p_ycdot_des];
@@ -150,10 +146,12 @@ for k = 1:N_k-1
     end
     opti.subject_to(Xk_end == X_k);
     
-    % GRF constraint
-    opti.subject_to(xc_k <= xc_slip_limit);
-    opti.subject_to(yc_k <= yc_slip_limit);
+%     % GRF constraint
+%     opti.subject_to(-xc_slip_limit <= xc_k <= xc_slip_limit);
+%     opti.subject_to(-yc_slip_limit <= yc_k <= yc_slip_limit);
 end
+
+% Final EOS state
 xc_k = X_k(1);
 yc_k = X_k(2);
 Lx_k = X_k(3);
@@ -161,13 +159,16 @@ Ly_k = X_k(4);
 Lz_k = X_k(5);
 xcdot_k = (Ly_k+p_ky*Lz_k)/(m*p_z_H);
 ycdot_k = (-Lx_k-p_kx*Lz_k)/(m*p_z_H);
-avgvel_error = [...
+
+% vel cost
+vel_error = [...
     xcdot_k-p_xcdot_des;
     ycdot_k-p_ycdot_des];
-opt_cost_avgvel = [opt_cost_avgvel, {avgvel_error'*Q(n)*avgvel_error}];
+opt_cost_vel = [opt_cost_vel, {vel_error'*Q(n)*vel_error}];
+
 % GRF constraint
-opti.subject_to(-xc_slip_limit <= xc_k <= xc_slip_limit);
-opti.subject_to(-yc_slip_limit <= yc_k <= yc_slip_limit);
+% opti.subject_to(-xc_slip_limit <= xc_k <= xc_slip_limit);
+% opti.subject_to(-yc_slip_limit <= yc_k <= yc_slip_limit);
 
 % initial condition constraint
 opti.subject_to(X_traj(:,1) == p_x_init);
@@ -177,46 +178,40 @@ z_prev = 0;
 for n = 1:N_fp
     Ufp_xy = Ufp_traj(1:2,n);
     Ufp_z = Ufp_traj(3,n);
-    opti.subject_to(-p_ufp_max(1:2) <= Ufp_xy <= p_ufp_max(1:2))
-    opti.subject_to(-p_ufp_max(3) <= Ufp_z - z_prev <= p_ufp_max(3));
+    opti.subject_to(p_ufp_min(1:2) <= Ufp_xy <= p_ufp_max(1:2))
+    opti.subject_to(p_ufp_min(3) <= Ufp_z - z_prev <= p_ufp_max(3));
     z_prev = Ufp_z;
 end
 
 % Combine cost, vars, constraints, parameters
+try
 final_angmom_error = x_eos{end}(3:end) - x_eos{end-1}(3:end);
-opt_cost_stab = final_angmom_error' * 100*Q(n) * final_angmom_error;
-% opt_cost_vel_total = sum(vertcat(opt_cost_vel{:}));
+opt_cost_stab = final_angmom_error' * 10*Q(n) * final_angmom_error;
+catch
+    opt_cost_stab = 0;
+end
+opt_cost_vel_total = sum(vertcat(opt_cost_vel{:}));
 opt_cost_avgvel_total = sum(vertcat(opt_cost_avgvel{:}));
 
-opti.minimize(opt_cost_avgvel_total);
+
+% opti.minimize(opt_cost_avgvel_total);
 % opti.minimize(opt_cost_vel_total + opt_cost_stab);
-% opti.minimize(opt_cost_avgvel_total + opt_cost_stab);
+opti.minimize(opt_cost_avgvel_total + opt_cost_stab);
 
 %% Create an OPT solver
-if sol_type == "qrqp"
+if sol_type == "qrqp" % qrqp (not as robust joris says on google groups)
     % C++ Code Generation
     opts = struct(...
         'qpsol',            'qrqp',...
         'print_header',     false,...
         'print_iteration',  false,...
-        'print_time',       false);    % osqp, qrqp (not as robust joris says on google groups)
+        'print_time',       false);    % osqp, qrqp (not as robust, joris says on casadi google groups)
     opts.qpsol_options = struct(...
         'print_iter',       false,...
         'print_header',     false,...
         'print_info',       false);
     opti.solver('sqpmethod',opts);
-    f_opti = opti.to_function('F_sqp',{p_x_init,p_xcdot_des,p_ycdot_des,p_z_H,p_ufp_max},{Ufp_traj});
-    
-    % test
-%     opti.set_value(p_x_init,[0.1;0;0;0;0])
-%     opti.set_value(p_xcdot_des,1);
-%     opti.set_value(p_ycdot_des,1);
-%     opti.set_value(p_z_H,0.8);
-%     opti.set_value(p_ufp_delta,10);
-%     opti.set_value(p_k,[tan(deg2rad(5)); tan(deg2rad(5))]);
-%     sol = opti.solve();
-%     xsol = sol.value(X_traj)
-%     ufpsol = sol.value(Ufp_traj)
+    f_opti = opti.to_function('F_sqp',{p_x_init,p_xcdot_des,p_ycdot_des,p_z_H,p_ufp_max,p_ufp_min,p_k,p_mu},{Ufp_traj});
     
     % code generation
     %     F_sqp.save('F_sqp.casadi');
@@ -225,6 +220,13 @@ if sol_type == "qrqp"
     %     mex sqptest.c -DMATLAB_MEX_FILE
     %     disp('done')
     %     format long
+elseif sol_type == "ipopt"
+    p_opts = struct(...
+        );    
+    s_opts = struct(...
+        'linear_solver',        'ma57');
+    opti.solver('ipopt',p_opts,s_opts);
+    f_opti = 'null';
 end
 
 %% Return symbolics and solver

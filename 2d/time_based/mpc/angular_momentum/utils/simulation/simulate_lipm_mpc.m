@@ -27,6 +27,7 @@ ufp_min = info.ctrl_info.mpc.ufp_min;
 ufp_delta = info.ctrl_info.mpc.ufp_delta;
 N_steps = info.ctrl_info.mpc.N_steps;
 
+% solver = info.ctrl_info.mpc.solver;
 opti = info.ctrl_info.mpc.opti;
 f_opti = info.ctrl_info.mpc.f_opti;
 p_x_init = info.ctrl_info.mpc.p_x_init;

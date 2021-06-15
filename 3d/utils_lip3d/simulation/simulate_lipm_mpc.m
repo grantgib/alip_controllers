@@ -11,7 +11,7 @@ z_H = info.gait_info.z_H;
 
 x_init = info.gait_info.x_init;
 phase_type = info.gait_info.phase_type;
-t_step = info.gait_info.t_step;
+t_step = info.gait_info.t_step_period;
 num_steps = info.gait_info.num_steps;
 num_steps_change_vel = info.gait_info.num_steps_change_vel;
 num_steps_change_slope = info.gait_info.num_steps_change_slope;
@@ -31,7 +31,7 @@ mu = info.gait_info.mu;
 ufp_type = info.ctrl_info.type;
 ufp_max = info.ctrl_info.mpc.ufp_max;
 ufp_min = info.ctrl_info.mpc.ufp_min;
-N_steps = info.ctrl_info.mpc.N_steps;
+N_steps = info.ctrl_info.mpc.N_steps_ahead;
 opti = info.ctrl_info.mpc.opti;
 f_opti = info.ctrl_info.mpc.f_opti;
 p_x_init = info.ctrl_info.mpc.p_x_init;
