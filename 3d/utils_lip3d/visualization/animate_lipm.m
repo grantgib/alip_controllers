@@ -51,8 +51,15 @@ line([p_st(1) p_com(1)],[p_st(2) p_com(2)],[p_st(3) p_com(3)],...
 scatter3(p_com(1),p_com(2),p_com(3),sz_com,gray,'filled',...
     'MarkerFaceAlpha',alpha_init)
 
-% bnd = 1000;
-% line([-bnd bnd],[-bnd bnd],[kx*-bnd+ky*-bnd kx*bnd+ky*bnd],'LineWidth',4,'color','k');
+% ground 
+% ground_length = 100; hold on;
+% line([0, ground_length], [0, ky*ground_length],[0, kx*ground_length+ky*ground_length],...
+%     'LineStyle','--','Color','k');
+% bnd = 100;
+% xl = [0 bnd];
+% yl = [0 bnd];
+% zl = [0 kx(1)*bnd+ky(1)*bnd];
+% line('XData',xl,'YData',yl,'ZData',zl,'LineWidth',4,'LineStyle','--','color','k');
 % s = surf(xlin,ylin,zlin,'EdgeColor','none','FaceAlpha',0.5);
 
 %% Animate Figure
@@ -81,7 +88,7 @@ for i = 1:len
     end
     
     drawnow;
-    pause(0.01);
+    pause(0.005);
 end
 
 
